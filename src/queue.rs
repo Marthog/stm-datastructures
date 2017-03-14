@@ -4,15 +4,15 @@ use std::any::Any;
 use super::arclist::*;
 
 #[derive(Clone)]
-pub struct TQueue<T> {
+pub struct Queue<T> {
     read: TVar<ArcList<T>>,
     write: TVar<ArcList<T>>,
 }
 
 /// A threadsafe Queue using transactional memory.
-impl<T: Any+Sync+Clone+Send> TQueue<T> {
-    pub fn new() -> TQueue<T> {
-        TQueue {
+impl<T: Any+Sync+Clone+Send> Queue<T> {
+    pub fn new() -> Queue<T> {
+        Queue {
             read: TVar::new(End),
             write: TVar::new(End),
         }
@@ -51,8 +51,8 @@ mod tests {
     use stm::*;
 
     #[test]
-    fn test_queue_push_pop() {
-        let mut queue = TQueue::new();
+    fn test_channel_push_pop() {
+        let mut queue = Queue::new();
         let x = atomically(|trans| {
             queue.push(trans, 42)?;
             queue.pop(trans)
@@ -60,8 +60,8 @@ mod tests {
         assert_eq!(42, x);
     }
     #[test]
-    fn test_queue_order() {
-        let mut queue = TQueue::new();
+    fn test_channel_order() {
+        let mut queue = Queue::new();
         let x = atomically(|trans| {
             queue.push(trans, 1)?;
             queue.push(trans, 2)?;
@@ -75,8 +75,8 @@ mod tests {
     }
 
     #[test]
-    fn test_queue_multi_transactions() {
-        let mut queue = TQueue::new();
+    fn test_channel_multi_transactions() {
+        let mut queue = Queue::new();
         let mut queue2 = queue.clone();
 
         atomically(|trans| {
@@ -97,10 +97,10 @@ mod tests {
     }
 
     #[test]
-    fn test_queue_threaded() {
+    fn test_channel_threaded() {
         use std::thread;
         use std::time::Duration;
-        let mut queue = TQueue::new();
+        let mut queue = Queue::new();
 
         for i in 0..10 {
             let mut queue2 = queue.clone();

@@ -4,14 +4,14 @@ use std::any::Any;
 use super::arclist::*;
 
 #[derive(Clone)]
-pub struct TStack<T> {
+pub struct Stack<T> {
     stack: TVar<ArcList<T>>,
 }
 
 /// A threadsafe stack using transactional memory.
-impl<T: Any+Sync+Clone+Send> TStack<T> {
-    pub fn new() -> TStack<T> {
-        TStack {
+impl<T: Any+Sync+Clone+Send> Stack<T> {
+    pub fn new() -> Stack<T> {
+        Stack {
             stack: TVar::new(End),
         }
     }
@@ -39,7 +39,7 @@ mod tests {
 
     #[test]
     fn test_stack_push_pop() {
-        let mut stack = TStack::new();
+        let mut stack = Stack::new();
         let x = atomically(|trans| {
             stack.push(trans, 42)?;
             stack.pop(trans)
@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn test_stack_order() {
-        let mut stack = TStack::new();
+        let mut stack = Stack::new();
         let x = atomically(|trans| {
             stack.push(trans, 1)?;
             stack.push(trans, 2)?;
@@ -64,7 +64,7 @@ mod tests {
 
     #[test]
     fn test_stack_multi_transactions() {
-        let mut stack = TStack::new();
+        let mut stack = Stack::new();
         let mut stack2 = stack.clone();
 
         atomically(|trans| {
@@ -88,7 +88,7 @@ mod tests {
     fn test_stack_threaded() {
         use std::thread;
         use std::time::Duration;
-        let mut stack = TStack::new();
+        let mut stack = Stack::new();
 
         for i in 0..10 {
             let mut stack2 = stack.clone();

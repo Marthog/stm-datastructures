@@ -1,21 +1,21 @@
 use stm::*;
 use std::sync::Arc;
 use std::any::Any;
-use super::TQueue;
+use super::queue::Queue;
 
 #[derive(Clone)]
-pub struct TBQueue<T> {
-    queue: TQueue<T>,
+pub struct BoundedQueue<T> {
+    queue: Queue<T>,
     len: TVar<usize>,
     max_len: usize,
 }
 
 
 /// A threadsafe stack using transactional memory.
-impl<T: Any+Sync+Clone+Send> TBQueue<T> {
-    pub fn new(max_len: usize) -> TBQueue<T> {
-        TBQueue {
-            queue: TQueue::new(),
+impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
+    pub fn new(max_len: usize) -> BoundedQueue<T> {
+        BoundedQueue {
+            queue: Queue::new(),
             len: TVar::new(0),
             max_len: max_len,
         }
@@ -32,6 +32,7 @@ impl<T: Any+Sync+Clone+Send> TBQueue<T> {
 
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
         let x = self.queue.pop(trans)?;
+        // Order matters: decreasing len first reduces the number of values.
         let len = self.len.read(trans)?;
         self.len.write(trans, len-1)?;
         Ok(x)
@@ -46,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_bqueue_push_pop() {
-        let mut queue = TBQueue::new(1);
+        let mut queue = BoundedQueue::new(1);
         let x = atomically(|trans| {
             queue.push(trans, 42)?;
             queue.pop(trans)
@@ -56,7 +57,7 @@ mod tests {
 
     #[test]
     fn test_bqueue_order() {
-        let mut queue = TBQueue::new(3);
+        let mut queue = BoundedQueue::new(3);
         let x = atomically(|trans| {
             queue.push(trans, 1)?;
             queue.push(trans, 2)?;
@@ -71,7 +72,7 @@ mod tests {
 
     #[test]
     fn test_bqueue_multi_transactions() {
-        let mut queue = TBQueue::new(3);
+        let mut queue = BoundedQueue::new(3);
         let mut queue2 = queue.clone();
 
         atomically(|trans| {
@@ -95,7 +96,7 @@ mod tests {
     fn test_bqueue_threaded() {
         use std::thread;
         use std::time::Duration;
-        let mut queue = TBQueue::new(10);
+        let mut queue = BoundedQueue::new(10);
 
         for i in 0..10 {
             let mut queue2 = queue.clone();
@@ -130,7 +131,7 @@ mod tests {
     fn test_bqueue_threaded_short_queue() {
         use std::thread;
         use std::time::Duration;
-        let mut queue = TBQueue::new(2);
+        let mut queue = BoundedQueue::new(2);
 
         for i in 0..10 {
             let mut queue2 = queue.clone();

@@ -1,17 +1,11 @@
 extern crate stm;
 
 mod arclist;
-mod tqueue;
-mod tbqueue;
-mod tstack;
-mod tbinary_tree;
+pub mod queue;
+pub mod bounded_queue;
+pub mod stack;
 
-pub use tqueue::TQueue;
-pub use tbqueue::TBQueue;
-pub use tstack::TStack;
+pub use queue::Queue;
+pub use bounded_queue::BoundedQueue;
+pub use stack::Stack;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-}
