@@ -1,0 +1,7 @@
+[package]
+name = "stm-datastructures"
+version = "0.1.0"
+authors = ["Marthog <Marthog@users.noreply.github.com>"]
+
+[dependencies]
+stm = "0.2"
