@@ -16,9 +16,8 @@ impl<T: Any+Sync+Clone+Send> Stack<T> {
         }
     }
 
-    pub fn push(&self, trans: &mut Transaction, val: T) -> StmResult<()> {
-        let end = self.stack.read(trans)?;
-        self.stack.write(trans, Elem(val, Arc::new(end)))
+    pub fn push(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
+        self.stack.modify(trans, |s| Elem(value, Arc::new(s)))
     }
 
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
@@ -35,11 +34,10 @@ impl<T: Any+Sync+Clone+Send> Stack<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stm::*;
 
     #[test]
     fn test_stack_push_pop() {
-        let mut stack = Stack::new();
+        let stack = Stack::new();
         let x = atomically(|trans| {
             stack.push(trans, 42)?;
             stack.pop(trans)
@@ -49,7 +47,7 @@ mod tests {
 
     #[test]
     fn test_stack_order() {
-        let mut stack = Stack::new();
+        let stack = Stack::new();
         let x = atomically(|trans| {
             stack.push(trans, 1)?;
             stack.push(trans, 2)?;
@@ -64,8 +62,8 @@ mod tests {
 
     #[test]
     fn test_stack_multi_transactions() {
-        let mut stack = Stack::new();
-        let mut stack2 = stack.clone();
+        let stack = Stack::new();
+        let stack2 = stack.clone();
 
         atomically(|trans| {
             stack2.push(trans, 1)?;
@@ -88,10 +86,10 @@ mod tests {
     fn test_stack_threaded() {
         use std::thread;
         use std::time::Duration;
-        let mut stack = Stack::new();
+        let stack = Stack::new();
 
         for i in 0..10 {
-            let mut stack2 = stack.clone();
+            let stack2 = stack.clone();
             thread::spawn(move || {
                 thread::sleep(Duration::from_millis(20));
                 atomically(|trans| 

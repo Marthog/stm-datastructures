@@ -1,41 +1,38 @@
 use stm::*;
-use std::sync::Arc;
 use std::any::Any;
 use super::queue::Queue;
 
+/// A threadsafe bounded queue using transactional memory.
 #[derive(Clone)]
 pub struct BoundedQueue<T> {
     queue: Queue<T>,
-    len: TVar<usize>,
-    max_len: usize,
+
+    // `cap` safes the number of elements, that may still
+    // fit into this queue.
+    cap: TVar<usize>
 }
 
 
-/// A threadsafe stack using transactional memory.
 impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
-    pub fn new(max_len: usize) -> BoundedQueue<T> {
+    pub fn new(capacity: usize) -> BoundedQueue<T> {
         BoundedQueue {
             queue: Queue::new(),
-            len: TVar::new(0),
-            max_len: max_len,
+            cap: TVar::new(capacity),
         }
     }
 
     pub fn push(&self, trans: &mut Transaction, val: T) -> StmResult<()> {
-        let len = self.len.read(trans)?;
-        if len>=self.max_len {
+        let cap = self.cap.read(trans)?;
+        if cap==0 {
             retry()?;
         }
-        self.len.write(trans, len+1)?;
+        self.cap.write(trans, cap-1)?;
         self.queue.push(trans, val)
     }
 
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
-        let x = self.queue.pop(trans)?;
-        // Order matters: decreasing len first reduces the number of values.
-        let len = self.len.read(trans)?;
-        self.len.write(trans, len-1)?;
-        Ok(x)
+        self.cap.modify(trans, |x| x+1)?;
+        self.queue.pop(trans)
     }
 }
 

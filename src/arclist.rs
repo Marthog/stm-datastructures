@@ -1,5 +1,4 @@
 use std::sync::Arc;
-use std::mem;
 
 #[derive(Clone)]
 pub enum ArcList<T> {
@@ -22,6 +21,7 @@ impl<T:Clone> ArcList<T> {
         Elem(t, Arc::new(self))
     }
 
+    #[allow(dead_code)]
     pub fn head(self) -> Option<T> {
         match self {
             Elem(x,_) => Some(x),

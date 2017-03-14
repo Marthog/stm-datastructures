@@ -19,8 +19,9 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
     }
 
     pub fn push(&self, trans: &mut Transaction, val: T) -> StmResult<()> {
-        let end = self.write.read(trans)?;
-        self.write.write(trans, Elem(val, Arc::new(end)))
+        self.write.modify(trans, |end| 
+            Elem(val, Arc::new(end))
+        )
     }
 
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
@@ -30,12 +31,11 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
                 Ok(x)
             }
             End             => {
-                let write_list = self.write.read(trans)?;
-                self.write.write(trans, End);
+                let write_list = self.write.replace(trans, End)?;
                 match write_list.reverse() {
                     End     => retry()?,
                     Elem(x,xs) => {
-                        self.read.write(trans, (*xs).clone());
+                        self.read.write(trans, (*xs).clone())?;
                         Ok(x)
                     }
                 }
@@ -52,7 +52,7 @@ mod tests {
 
     #[test]
     fn test_channel_push_pop() {
-        let mut queue = Queue::new();
+        let queue = Queue::new();
         let x = atomically(|trans| {
             queue.push(trans, 42)?;
             queue.pop(trans)
@@ -61,7 +61,7 @@ mod tests {
     }
     #[test]
     fn test_channel_order() {
-        let mut queue = Queue::new();
+        let queue = Queue::new();
         let x = atomically(|trans| {
             queue.push(trans, 1)?;
             queue.push(trans, 2)?;
@@ -76,8 +76,8 @@ mod tests {
 
     #[test]
     fn test_channel_multi_transactions() {
-        let mut queue = Queue::new();
-        let mut queue2 = queue.clone();
+        let queue = Queue::new();
+        let queue2 = queue.clone();
 
         atomically(|trans| {
             queue2.push(trans, 1)?;
@@ -100,10 +100,10 @@ mod tests {
     fn test_channel_threaded() {
         use std::thread;
         use std::time::Duration;
-        let mut queue = Queue::new();
+        let queue = Queue::new();
 
         for i in 0..10 {
-            let mut queue2 = queue.clone();
+            let queue2 = queue.clone();
             thread::spawn(move || {
                 thread::sleep(Duration::from_millis(20-i as u64));
                 atomically(|trans| 
