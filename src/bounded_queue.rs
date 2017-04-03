@@ -1,19 +1,45 @@
-use stm::*;
+use ::*;
+use ::stm::*;
 use std::any::Any;
-use super::queue::Queue;
+use super::Queue;
 
-/// A threadsafe bounded queue using transactional memory.
+/// `Queue` is a threadsafe FIFO queue, that uses software transactional memory.
+///
+/// It is similar to synchronous channels, but undoes operations in case of aborted transactions.
+///
+///
+/// # Example
+///
+/// ```
+/// extern crate stm;
+/// extern crate stm_datastructures;
+///
+/// use stm::*;
+/// use ::stm_datastructures::BoundedQueue;
+///
+/// fn main() {
+/// let queue = BoundedQueue::new(10);
+/// let x = atomically(|trans| {
+///     queue.push(trans, 42)?;
+///     queue.pop(trans)
+/// });
+/// assert_eq!(x, 42);
+/// }
+/// ```
 #[derive(Clone)]
 pub struct BoundedQueue<T> {
+    /// Internally use a normal queue.
     queue: Queue<T>,
 
-    // `cap` safes the number of elements, that may still
-    // fit into this queue.
+    /// `cap` stores the number of elements, that may still
+    /// fit into this queue.
     cap: TVar<usize>
 }
 
 
 impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
+    /// Create new `BoundedQueue`, that can hold maximally
+    /// `capacity` elements.
     pub fn new(capacity: usize) -> BoundedQueue<T> {
         BoundedQueue {
             queue: Queue::new(),
@@ -21,30 +47,70 @@ impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
         }
     }
 
+    /// Add a new element to the queue.
     pub fn push(&self, trans: &mut Transaction, val: T) -> StmResult<()> {
         let cap = self.cap.read(trans)?;
-        if cap==0 {
-            retry()?;
-        }
+        guard(cap>0)?;
         self.cap.write(trans, cap-1)?;
         self.queue.push(trans, val)
     }
 
+    /// Push a value to the front of the queue. Next call to `pop` will return `value`.
+    ///
+    /// `push_front` allows to undo pop-operations and operates the queue in a LIFO way.
+    pub fn push_front(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
+        let cap = self.cap.read(trans)?;
+        guard(cap>0)?;
+        self.cap.write(trans, cap-1)?;
+        self.queue.push_front(trans, value)
+    }
+
+    /// Return the first element without removing it.
+    pub fn try_peek(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
+        self.queue.try_peek(trans)
+    }
+
+    /// Return the first element without removing it.
+    pub fn peek(&self, trans: &mut Transaction) -> StmResult<T> {
+        self.queue.peek(trans)
+    }
+
+    /// Remove an element from the queue.
+    pub fn try_pop(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
+        let v = self.queue.try_pop(trans)?;
+        if v.is_some() {
+            self.cap.modify(trans, |x| x+1)?;
+        }
+        Ok(v)
+    }
+
+    /// Remove an element from the queue.
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
         self.cap.modify(trans, |x| x+1)?;
         self.queue.pop(trans)
+    }
+
+    /// Check if a queue is empty.
+    pub fn is_empty(&self, trans: &mut Transaction) -> StmResult<bool> {
+        self.queue.is_empty(trans)
+    }
+
+    /// Check if a queue is full.
+    pub fn is_full(&self, trans: &mut Transaction) -> StmResult<bool> {
+        let cap = self.cap.read(trans)?;
+        Ok(cap==0)
     }
 }
 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use stm::*;
+    use super::*;
 
     #[test]
-    fn test_bqueue_push_pop() {
-        let mut queue = BoundedQueue::new(1);
+    fn bqueue_push_pop() {
+        let queue = BoundedQueue::new(1);
         let x = atomically(|trans| {
             queue.push(trans, 42)?;
             queue.pop(trans)
@@ -53,8 +119,8 @@ mod tests {
     }
 
     #[test]
-    fn test_bqueue_order() {
-        let mut queue = BoundedQueue::new(3);
+    fn bqueue_order() {
+        let queue = BoundedQueue::new(3);
         let x = atomically(|trans| {
             queue.push(trans, 1)?;
             queue.push(trans, 2)?;
@@ -68,9 +134,9 @@ mod tests {
     }
 
     #[test]
-    fn test_bqueue_multi_transactions() {
-        let mut queue = BoundedQueue::new(3);
-        let mut queue2 = queue.clone();
+    fn bqueue_multi_transactions() {
+        let queue = BoundedQueue::new(3);
+        let queue2 = queue.clone();
 
         atomically(|trans| {
             queue2.push(trans, 1)?;
@@ -90,13 +156,12 @@ mod tests {
     }
 
     #[test]
-    fn test_bqueue_threaded() {
+    fn bqueue_threaded() {
         use std::thread;
-        use std::time::Duration;
-        let mut queue = BoundedQueue::new(10);
+        let queue = BoundedQueue::new(10);
 
         for i in 0..10 {
-            let mut queue2 = queue.clone();
+            let queue2 = queue.clone();
             thread::spawn(move || {
                 atomically(|trans| 
                     queue2.push(trans, i)
@@ -106,7 +171,7 @@ mod tests {
 
         let mut v = atomically(|trans| {
             let mut v = Vec::new();
-            for i in 0..10 {
+            for _ in 0..10 {
                 v.push(queue.pop(trans)?);
             }
             Ok(v)
@@ -118,20 +183,19 @@ mod tests {
         }
     }
 
-    /// Just like `test_bqueue_threaded`, but the
+    /// Just like `bqueue_threaded`, but the
     /// queue is too short to hold all elements simultaneously.
     ///
     /// The threads must push the elments one after another.
     /// The main thread has to block multiple times while querying 
     /// all elements.
     #[test]
-    fn test_bqueue_threaded_short_queue() {
+    fn bqueue_threaded_short_queue() {
         use std::thread;
-        use std::time::Duration;
-        let mut queue = BoundedQueue::new(2);
+        let queue = BoundedQueue::new(2);
 
         for i in 0..10 {
-            let mut queue2 = queue.clone();
+            let queue2 = queue.clone();
             thread::spawn(move || {
                 atomically(|trans| 
                     queue2.push(trans, i)
@@ -140,7 +204,7 @@ mod tests {
         }
 
         let mut v = Vec::new();
-        for i in 0..10 {
+        for _ in 0..10 {
             v.push(atomically(|trans| queue.pop(trans)));
         }
 

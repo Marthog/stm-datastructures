@@ -1,12 +1,19 @@
 use std::sync::Arc;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum ArcList<T> {
     Elem(T, Arc<ArcList<T>>),
     End
 }
 
 impl<T:Clone> ArcList<T> {
+    pub fn is_empty(&self) -> bool {
+        match self {
+            &Elem(_,_)   => false,
+            &End         => true
+        }
+    }
+
     pub fn reverse(&self) -> Self {
         let mut new_list = End;
         let mut ls = self.clone();

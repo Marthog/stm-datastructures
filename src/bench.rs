@@ -17,13 +17,13 @@ fn bench_stm_channel(b: &mut Bencher) {
             for i in 0..1000 {
                 receiver.recv();
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
             sender.send(i);
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
 
@@ -39,13 +39,13 @@ fn bench_stm_sync_channel1(b: &mut Bencher) {
             for i in 0..1000 {
                 receiver.recv();
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
             sender.send(i);
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
 
@@ -61,13 +61,13 @@ fn bench_stm_sync_channel200(b: &mut Bencher) {
             for i in 0..1000 {
                 receiver.recv();
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
             sender.send(i);
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
 
@@ -84,7 +84,7 @@ fn bench_stm_queue(b: &mut Bencher) {
                     queue.pop(trans)
                 });
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
@@ -92,7 +92,7 @@ fn bench_stm_queue(b: &mut Bencher) {
                 queue2.push(trans, i)
             });
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
 
@@ -110,7 +110,7 @@ fn bench_stm_bqueue1(b: &mut Bencher) {
                     queue.pop(trans)
                 });
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
@@ -118,7 +118,7 @@ fn bench_stm_bqueue1(b: &mut Bencher) {
                 queue2.push(trans, i)
             });
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
 
@@ -135,7 +135,7 @@ fn bench_stm_bqueue200(b: &mut Bencher) {
                     queue.pop(trans)
                 });
             }
-            sender2.send(());
+            let _ = sender2.send(());
         });
 
         for i in 0..1000 {
@@ -143,6 +143,6 @@ fn bench_stm_bqueue200(b: &mut Bencher) {
                 queue2.push(trans, i)
             });
         }
-        receiver2.recv();
+        let _ = receiver2.recv();
     });
 }
