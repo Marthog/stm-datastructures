@@ -1,4 +1,3 @@
-use ::*;
 use stm::*;
 use std::sync::Arc;
 use std::any::Any;

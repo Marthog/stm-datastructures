@@ -1,5 +1,4 @@
 use stm::*;
-use super::{guard};
 
 /// `Semaphore` is an implementation of semaphores on top of software txactional 
 /// memory.
@@ -36,7 +35,6 @@ impl Semaphore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use stm::*;
 
     // Test if wait with start value of 1 works.
     #[test]
