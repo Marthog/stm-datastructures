@@ -1,14 +1,9 @@
-#![feature(test)]
-
 extern crate stm;
 
 mod arclist;
 pub mod queue;
 pub mod bounded_queue;
 pub mod semaphore;
-
-#[cfg(test)]
-mod bench;
 
 use stm::*;
 

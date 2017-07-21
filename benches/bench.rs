@@ -1,7 +1,11 @@
+#![feature(test)]
 extern crate test;
 
+extern crate stm;
+extern crate stm_datastructures;
+
 use stm::*;
-use super::*;
+use stm_datastructures::*;
 use self::test::Bencher;
 use std::sync::mpsc::{channel, sync_channel};
 use std::thread;
