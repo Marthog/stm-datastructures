@@ -5,3 +5,4 @@ authors = ["Marthog <Marthog@users.noreply.github.com>"]
 
 [dependencies]
 stm = "0.2"
+

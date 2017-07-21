@@ -1,4 +1,4 @@
-//#![feature(test)]
+#![feature(test)]
 
 extern crate stm;
 
@@ -7,8 +7,8 @@ pub mod queue;
 pub mod bounded_queue;
 pub mod semaphore;
 
-//#[cfg(test)]
-//mod bench;
+#[cfg(test)]
+mod bench;
 
 use stm::*;
 
@@ -16,8 +16,26 @@ pub use queue::Queue;
 pub use bounded_queue::BoundedQueue;
 pub use semaphore::Semaphore;
 
-
-/// Unwrap `Option` or call retry.
+#[inline]
+/// Unwrap `Option` or call retry if it is `None`.
+///
+/// # Example
+///
+/// ```
+/// # extern crate stm;
+/// # extern crate stm_datastructures;
+/// use stm::*;
+/// # use stm_datastructures::*;
+///
+/// # fn main() {
+/// let x = atomically(|_tx|
+///     unwrap_or_retry(Some(42))
+/// );
+/// assert_eq!(x, 42);
+/// # }
+/// ```
+///
+/// Very likely to be merged into stm library.
 pub fn unwrap_or_retry<T>(option: Option<T>) 
     -> StmResult<T> {
     match option {
@@ -26,7 +44,27 @@ pub fn unwrap_or_retry<T>(option: Option<T>)
     }
 }
 
+#[inline]
 /// Retry until a the condition holds.
+///
+/// # Example
+///
+/// ```
+/// # extern crate stm;
+/// # extern crate stm_datastructures;
+/// use stm::*;
+/// # use stm_datastructures::*;
+///
+/// # fn main() {
+/// let x = atomically(|_tx| {
+///     guard(true)?; // guard(true) always succeeds.
+///     Ok(42)
+/// });
+/// assert_eq!(x, 42);
+/// # }
+/// ```
+///
+/// Very likely to be merged into stm library.
 pub fn guard(cond: bool) -> StmResult<()> {
     if cond {
         Ok(())
@@ -35,15 +73,33 @@ pub fn guard(cond: bool) -> StmResult<()> {
     }
 }
 
+#[inline]
 /// Optionally run a STM action. If `f` fails with a `retry()`, it does 
-/// not cancel the whole transaction, but returns 
-pub fn optionally<T,F>(trans: &mut Transaction, f: F) -> StmResult<Option<T>>
+/// not cancel the whole transaction, but returns `None`.
+///
+/// # Example
+///
+/// ```
+/// # extern crate stm;
+/// # extern crate stm_datastructures;
+/// use stm::*;
+/// # use stm_datastructures::*;
+///
+/// # fn main() {
+/// let x:Option<i32> = atomically(|tx| 
+///     optionally(tx, |_| retry()));
+/// assert_eq!(x, None);
+/// # }
+/// ```
+///
+/// Very likely to be merged into stm library.
+pub fn optionally<T,F>(tx: &mut Transaction, f: F) -> StmResult<Option<T>>
     where F: Fn(&mut Transaction) -> StmResult<T>
 {
-    trans.or( 
-        |t| f(t).map(|x| Some(x)),
-        |_| Ok(None))
-
+    tx.or( 
+        |t| f(t).map(Some),
+        |_| Ok(None)
+    )
 }
 
 #[cfg(test)]
