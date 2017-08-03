@@ -1,42 +1,94 @@
 use std::sync::Arc;
-use std::mem;
 
-#[derive(Clone, Debug)]
-enum Prim<T> {
-    Elem(T, Arc<Prim<T>>),
-    End,
+#[derive(Debug)]
+pub struct ArcList<T> {
+    head: Option<Arc<(T, ArcList<T>)>>
 }
-use self::Prim::*;
 
-impl<T> Prim<T> {
-    pub fn prepend(self, t: T) -> Self {
-        Elem(t, Arc::new(self))
-    }
-
-    #[allow(dead_code)]
-    #[inline]
-    /// Destroy the whole list.
-    /// 
-    /// Using `Drop` would break the ability to do destructive pattern
-    /// matches on the constructor.
-    pub fn destroy(self) {
-        let mut slf = self;
-        while let Elem(_,tail) = slf {
-            slf = match Arc::try_unwrap(tail) {
-                Ok(t)   => t,
-                Err(_)  => return ()
-            }
+impl<T> Clone for ArcList<T> {
+    fn clone(&self) -> Self {
+        ArcList {
+            head: self.head.clone()
         }
     }
 }
 
-impl<T: Clone> Prim<T> {
-    pub fn reverse(&self) -> Self {
-        let mut new_list = End;
-        let mut ls = self.clone();
-        while let Elem(x, xs) = ls {
-            new_list = new_list.prepend(x);
-            ls = (*xs).clone();
+impl<T> ArcList<T> {
+    /// Create a new, empty list.
+    pub fn new() -> Self {
+        ArcList{ head: None }
+    }
+
+    pub fn push(&mut self, t: T) {
+        *self = ArcList::prepend(self.take(), t);
+    }
+
+    /// Prepend a value to the existing list.
+    pub fn prepend(self, t: T) -> Self {
+        ArcList{
+            head: Some(Arc::new((t, self)))
+        }
+    }
+
+    /// Check if the list is empty.
+    pub fn is_empty(&self) -> bool {
+        self.head.is_none()
+    }
+
+    /// Split the list into head and reference to the tail.
+    pub fn as_ref(&self) -> Option<(&T, &ArcList<T>)> {
+        self.head.as_ref().map(|h| (&h.0, &h.1))
+    }
+
+    /// Split the list into head and tail.
+    ///
+    /// Unlike `as_ref` the tail is returned as a new list and
+    /// not a reference.
+    pub fn split(&self) -> Option<(&T, ArcList<T>)> {
+        self.as_ref().map(|(x,xs)| (x, xs.clone()))
+    }
+
+    /// Return the head of the list.
+    pub fn head(&self) -> Option<&T> {
+        self.head.as_ref().map(|h| &h.0)
+    }
+
+    /// Take the inner of the list and leave the original empty.
+    pub fn take(&mut self) -> Self {
+        ArcList{ head: self.head.take() }
+    }
+}
+
+impl<T: Clone> ArcList<T> {
+    /// Split a list into head and tail.
+    ///
+    /// Unlike `split` `into_splitted` consumes self and returns the inner by value.
+    ///
+    /// Under normal condition this requires cloning the value, but the
+    /// implementation minimizes the amount of neccessary clones.
+    /// Especially when the reference is unique, neither the value, nor the `ArcList`
+    /// are cloned.
+    pub fn into_splitted(mut self) -> Option<(T, ArcList<T>)> {
+        self.head.take().map(|h| {
+            match Arc::try_unwrap(h) {
+                Ok(x)   => x,
+                Err(rf) => (*rf).clone()
+            }
+        })
+    }
+
+    pub fn pop(&mut self) -> Option<T> {
+        self.take().into_splitted().map(|(x,xs)| {
+            *self = xs;
+            x
+        })
+    }
+
+    /// Reverse the list.
+    pub fn reverse(mut self) -> Self {
+        let mut new_list = ArcList::new();
+        while let Some(t) = self.pop() {
+            new_list.push(t)
         }
         new_list
     }
@@ -44,68 +96,44 @@ impl<T: Clone> Prim<T> {
 
 impl<T> Drop for ArcList<T> {
     fn drop(&mut self) {
-        use std::mem;
-        let slf = mem::replace(&mut self.prim, End);
-        slf.destroy();
-    }
-}
-
-
-#[derive(Clone, Debug)]
-pub struct ArcList<T> {
-    prim: Prim<T>
-}
-
-impl<T> ArcList<T> {
-    pub fn new() -> Self {
-        ArcList{ prim: End }
-    }
-
-    fn from_prim(prim: Prim<T>) -> Self {
-        ArcList{ prim }
-    }
-
-    fn take_prim(&mut self) -> Prim<T> {
-        mem::replace(&mut self.prim, End)
-    }
-
-    fn map<F>(mut self, f: F) -> Self
-    where
-        F: FnOnce(Prim<T>) -> Prim<T>
-    {
-        ArcList{ prim: f(self.take_prim()) }
-    }
-
-    pub fn prepend(self, t: T) -> Self {
-        self.map(|s| s.prepend(t))
-    }
-
-    pub fn is_empty(&self) -> bool {
-        match &self.prim {
-            &Elem(_, _) => false,
-            &End => true,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub fn head(&self) -> Option<&T> {
-        match &self.prim {
-            &Elem(ref x, _) => Some(x),
-            &End            => None
+        while let Some(h) = self.head.take() {
+            match Arc::try_unwrap(h) {
+                Ok((_,tail))    => *self = tail,
+                Err(_)      => {
+                    return;
+                }
+            }
         }
     }
 }
 
-impl<T: Clone> ArcList<T> {
-    pub fn reverse(self) -> Self {
-        self.map(|s| s.reverse())
-    }
+pub struct IterRef<'a, T:'a> {
+    list: &'a ArcList<T>
+}
 
-    pub fn split(mut self) -> Option<(T, ArcList<T>)> {
-        match self.take_prim() {
-            Elem(x,xs)  => Some((x, ArcList::from_prim((*xs).clone()))),
-            End         => None
+impl<'a, T> Iterator for IterRef<'a, T> {
+    type Item = &'a T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.list.as_ref() {
+            Some((x, xs)) => {
+                self.list = xs;
+                Some(x)
+            }
+            None    => None
         }
+    }
+}
+
+pub struct IterClone<T> {
+    list: ArcList<T>
+}
+
+impl<T:Clone> Iterator for IterClone<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.list.pop()
     }
 }
 
@@ -124,7 +152,6 @@ mod tests {
     /// The naive implementation of linked lists creates stack overflows.
     #[test]
     fn test_long_list() {
-        use std::mem;
         let mut list = ArcList::new();
         for i in 0..100000 {
             list = list.prepend(i);

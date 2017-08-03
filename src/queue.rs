@@ -79,14 +79,14 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
 
     /// Remove an element from the queue.
     pub fn try_pop(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
-        Ok(match self.read.read(trans)?.split() {
+        Ok(match self.read.read(trans)?.into_splitted() {
             Some((x, xs))     => {
                 self.read.write(trans, xs)?;
                 Some(x)
             }
             None             => {
                 let write_list = self.write.replace(trans, ArcList::new())?;
-                match write_list.reverse().split() {
+                match write_list.reverse().into_splitted() {
                     None     => None,
                     Some((x,xs)) => {
                         self.read.write(trans, xs.clone())?;
