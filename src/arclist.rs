@@ -2,21 +2,19 @@ use std::sync::Arc;
 
 #[derive(Debug)]
 pub struct ArcList<T> {
-    head: Option<Arc<(T, ArcList<T>)>>
+    head: Option<Arc<(T, ArcList<T>)>>,
 }
 
 impl<T> Clone for ArcList<T> {
     fn clone(&self) -> Self {
-        ArcList {
-            head: self.head.clone()
-        }
+        ArcList { head: self.head.clone() }
     }
 }
 
 impl<T> ArcList<T> {
     /// Create a new, empty list.
     pub fn new() -> Self {
-        ArcList{ head: None }
+        ArcList { head: None }
     }
 
     pub fn push(&mut self, t: T) {
@@ -25,9 +23,7 @@ impl<T> ArcList<T> {
 
     /// Prepend a value to the existing list.
     pub fn prepend(self, t: T) -> Self {
-        ArcList{
-            head: Some(Arc::new((t, self)))
-        }
+        ArcList { head: Some(Arc::new((t, self))) }
     }
 
     /// Check if the list is empty.
@@ -45,7 +41,7 @@ impl<T> ArcList<T> {
     /// Unlike `as_ref` the tail is returned as a new list and
     /// not a reference.
     pub fn split(&self) -> Option<(&T, ArcList<T>)> {
-        self.as_ref().map(|(x,xs)| (x, xs.clone()))
+        self.as_ref().map(|(x, xs)| (x, xs.clone()))
     }
 
     /// Return the head of the list.
@@ -55,7 +51,7 @@ impl<T> ArcList<T> {
 
     /// Take the inner of the list and leave the original empty.
     pub fn take(&mut self) -> Self {
-        ArcList{ head: self.head.take() }
+        ArcList { head: self.head.take() }
     }
 }
 
@@ -69,16 +65,14 @@ impl<T: Clone> ArcList<T> {
     /// Especially when the reference is unique, neither the value, nor the `ArcList`
     /// are cloned.
     pub fn into_splitted(mut self) -> Option<(T, ArcList<T>)> {
-        self.head.take().map(|h| {
-            match Arc::try_unwrap(h) {
-                Ok(x)   => x,
-                Err(rf) => (*rf).clone()
-            }
+        self.head.take().map(|h| match Arc::try_unwrap(h) {
+            Ok(x) => x,
+            Err(rf) => (*rf).clone(),
         })
     }
 
     pub fn pop(&mut self) -> Option<T> {
-        self.take().into_splitted().map(|(x,xs)| {
+        self.take().into_splitted().map(|(x, xs)| {
             *self = xs;
             x
         })
@@ -98,8 +92,8 @@ impl<T> Drop for ArcList<T> {
     fn drop(&mut self) {
         while let Some(h) = self.head.take() {
             match Arc::try_unwrap(h) {
-                Ok((_,tail))    => *self = tail,
-                Err(_)      => {
+                Ok((_, tail)) => *self = tail,
+                Err(_) => {
                     return;
                 }
             }
@@ -107,8 +101,8 @@ impl<T> Drop for ArcList<T> {
     }
 }
 
-pub struct IterRef<'a, T:'a> {
-    list: &'a ArcList<T>
+pub struct IterRef<'a, T: 'a> {
+    list: &'a ArcList<T>,
 }
 
 impl<'a, T> Iterator for IterRef<'a, T> {
@@ -120,16 +114,16 @@ impl<'a, T> Iterator for IterRef<'a, T> {
                 self.list = xs;
                 Some(x)
             }
-            None    => None
+            None => None,
         }
     }
 }
 
 pub struct IterClone<T> {
-    list: ArcList<T>
+    list: ArcList<T>,
 }
 
-impl<T:Clone> Iterator for IterClone<T> {
+impl<T: Clone> Iterator for IterClone<T> {
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {

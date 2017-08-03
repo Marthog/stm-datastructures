@@ -7,9 +7,9 @@ use super::arclist::*;
 // beginning of `read`. If `read` is empty, the reversed list `write` is
 // used as a new list. This way all operations are amortized constant time.
 
-/// `Queue` is a threadsafe FIFO queue, that uses software transactional memory.
+/// `Queue` is a threadsafe FIFO queue, that uses software txactional memory.
 ///
-/// It is similar to channels, but undoes operations in case of aborted transactions.
+/// It is similar to channels, but undoes operations in case of aborted txactions.
 ///
 ///
 /// # Example
@@ -23,9 +23,9 @@ use super::arclist::*;
 ///
 /// fn main() {
 ///     let queue = Queue::new();
-///     let x = atomically(|trans| {
-///         queue.push(trans, 42)?;
-///         queue.pop(trans)
+///     let x = atomically(|tx| {
+///         queue.push(tx, 42)?;
+///         queue.pop(tx)
 ///     });
 ///     assert_eq!(x, 42);
 /// }
@@ -36,7 +36,7 @@ pub struct Queue<T> {
     write: TVar<ArcList<T>>,
 }
 
-impl<T: Any+Sync+Clone+Send> Queue<T> {
+impl<T: Any + Sync + Clone + Send> Queue<T> {
     /// Create a new queue.
     pub fn new() -> Queue<T> {
         Queue {
@@ -46,50 +46,46 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
     }
 
     /// Add a new element to the queue.
-    pub fn push(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
-        self.write.modify(trans, |end| 
-                          end.prepend(value)
-        )
+    pub fn push(&self, tx: &mut Transaction, value: T) -> StmResult<()> {
+        self.write.modify(tx, |end| end.prepend(value))
     }
 
     /// Push a value to the front of the queue. Next call to `pop` will return `value`.
     ///
     /// `push_front` allows to undo pop-operations and operates the queue in a LIFO way.
-    pub fn push_front(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
-        self.read.modify(trans, |end| 
-                         end.prepend(value)
-        )
+    pub fn push_front(&self, tx: &mut Transaction, value: T) -> StmResult<()> {
+        self.read.modify(tx, |end| end.prepend(value))
     }
 
     /// Return the first element without removing it.
-    pub fn try_peek(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
-        let v = self.try_pop(trans)?;
+    pub fn try_peek(&self, tx: &mut Transaction) -> StmResult<Option<T>> {
+        let v = self.try_pop(tx)?;
         if let Some(ref e) = v {
-            self.push_front(trans, e.clone())?;
+            self.push_front(tx, e.clone())?;
         }
         Ok(v)
     }
 
     /// Return the first element without removing it.
-    pub fn peek(&self, trans: &mut Transaction) -> StmResult<T> {
-        let v = self.pop(trans)?;
-        self.push_front(trans, v.clone())?;
+    pub fn peek(&self, tx: &mut Transaction) -> StmResult<T> {
+        let v = self.pop(tx)?;
+        self.push_front(tx, v.clone())?;
         Ok(v)
     }
 
     /// Remove an element from the queue.
-    pub fn try_pop(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
-        Ok(match self.read.read(trans)?.into_splitted() {
-            Some((x, xs))     => {
-                self.read.write(trans, xs)?;
+    pub fn try_pop(&self, tx: &mut Transaction) -> StmResult<Option<T>> {
+        Ok(match self.read.read(tx)?.into_splitted() {
+            Some((x, xs)) => {
+                self.read.write(tx, xs)?;
                 Some(x)
             }
-            None             => {
-                let write_list = self.write.replace(trans, ArcList::new())?;
+            None => {
+                let write_list = self.write.replace(tx, ArcList::new())?;
                 match write_list.reverse().into_splitted() {
-                    None     => None,
-                    Some((x,xs)) => {
-                        self.read.write(trans, xs.clone())?;
+                    None => None,
+                    Some((x, xs)) => {
+                        self.read.write(tx, xs.clone())?;
                         Some(x)
                     }
                 }
@@ -98,15 +94,14 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
     }
 
     /// Remove an element from the queue.
-    pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
-        unwrap_or_retry(self.try_pop(trans)?)
+    pub fn pop(&self, tx: &mut Transaction) -> StmResult<T> {
+        unwrap_or_retry(self.try_pop(tx)?)
     }
 
     /// Check if a queue is empty.
-    pub fn is_empty(&self, trans: &mut Transaction) -> StmResult<bool> {
+    pub fn is_empty(&self, tx: &mut Transaction) -> StmResult<bool> {
         Ok(
-            self.read.read(trans)?.is_empty() || 
-            self.write.read(trans)?.is_empty()
+            self.read.read(tx)?.is_empty() || self.write.read(tx)?.is_empty(),
         )
     }
 }
@@ -120,47 +115,45 @@ mod tests {
     #[test]
     fn channel_push_pop() {
         let queue = Queue::new();
-        let x = atomically(|trans| {
-            queue.push(trans, 42)?;
-            queue.pop(trans)
+        let x = atomically(|tx| {
+            queue.push(tx, 42)?;
+            queue.pop(tx)
         });
         assert_eq!(42, x);
     }
     #[test]
     fn channel_order() {
         let queue = Queue::new();
-        let x = atomically(|trans| {
-            queue.push(trans, 1)?;
-            queue.push(trans, 2)?;
-            queue.push(trans, 3)?;
-            let x1 = queue.pop(trans)?;
-            let x2 = queue.pop(trans)?;
-            let x3 = queue.pop(trans)?;
-            Ok((x1,x2,x3))
+        let x = atomically(|tx| {
+            queue.push(tx, 1)?;
+            queue.push(tx, 2)?;
+            queue.push(tx, 3)?;
+            let x1 = queue.pop(tx)?;
+            let x2 = queue.pop(tx)?;
+            let x3 = queue.pop(tx)?;
+            Ok((x1, x2, x3))
         });
-        assert_eq!((1,2,3), x);
+        assert_eq!((1, 2, 3), x);
     }
 
     #[test]
-    fn channel_multi_transactions() {
+    fn channel_multi_txactions() {
         let queue = Queue::new();
         let queue2 = queue.clone();
 
-        atomically(|trans| {
-            queue2.push(trans, 1)?;
-            queue2.push(trans, 2)
+        atomically(|tx| {
+            queue2.push(tx, 1)?;
+            queue2.push(tx, 2)
         });
-        atomically(|trans| {
-            queue.push(trans, 3)
-        });
+        atomically(|tx| queue.push(tx, 3));
 
-        let x = atomically(|trans| {
-            let x1 = queue.pop(trans)?;
-            let x2 = queue.pop(trans)?;
-            let x3 = queue.pop(trans)?;
-            Ok((x1,x2,x3))
+        let x = atomically(|tx| {
+            let x1 = queue.pop(tx)?;
+            let x2 = queue.pop(tx)?;
+            let x3 = queue.pop(tx)?;
+            Ok((x1, x2, x3))
         });
-        assert_eq!((1,2,3), x);
+        assert_eq!((1, 2, 3), x);
     }
 
     #[test]
@@ -172,24 +165,22 @@ mod tests {
         for i in 0..10 {
             let queue2 = queue.clone();
             thread::spawn(move || {
-                thread::sleep(Duration::from_millis(20-i as u64));
-                atomically(|trans| 
-                    queue2.push(trans, i)
-                );
+                thread::sleep(Duration::from_millis(20 - i as u64));
+                atomically(|tx| queue2.push(tx, i));
             });
         }
 
-        let mut v = atomically(|trans| {
+        let mut v = atomically(|tx| {
             let mut v = Vec::new();
             for _ in 0..10 {
-                v.push(queue.pop(trans)?);
+                v.push(queue.pop(tx)?);
             }
             Ok(v)
         });
 
         v.sort();
         for i in 0..10 {
-            assert_eq!(v[i],i);
+            assert_eq!(v[i], i);
         }
     }
 }

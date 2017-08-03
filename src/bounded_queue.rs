@@ -1,4 +1,4 @@
-use ::stm::*;
+use stm::*;
 use std::any::Any;
 use super::Queue;
 
@@ -32,11 +32,11 @@ pub struct BoundedQueue<T> {
 
     /// `cap` stores the number of elements, that may still
     /// fit into this queue.
-    cap: TVar<usize>
+    cap: TVar<usize>,
 }
 
 
-impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
+impl<T: Any + Sync + Clone + Send> BoundedQueue<T> {
     /// Create new `BoundedQueue`, that can hold maximally
     /// `capacity` elements.
     pub fn new(capacity: usize) -> BoundedQueue<T> {
@@ -49,8 +49,8 @@ impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
     /// Add a new element to the queue.
     pub fn push(&self, trans: &mut Transaction, val: T) -> StmResult<()> {
         let cap = self.cap.read(trans)?;
-        guard(cap>0)?;
-        self.cap.write(trans, cap-1)?;
+        guard(cap > 0)?;
+        self.cap.write(trans, cap - 1)?;
         self.queue.push(trans, val)
     }
 
@@ -59,8 +59,8 @@ impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
     /// `push_front` allows to undo pop-operations and operates the queue in a LIFO way.
     pub fn push_front(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
         let cap = self.cap.read(trans)?;
-        guard(cap>0)?;
-        self.cap.write(trans, cap-1)?;
+        guard(cap > 0)?;
+        self.cap.write(trans, cap - 1)?;
         self.queue.push_front(trans, value)
     }
 
@@ -78,14 +78,14 @@ impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
     pub fn try_pop(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
         let v = self.queue.try_pop(trans)?;
         if v.is_some() {
-            self.cap.modify(trans, |x| x+1)?;
+            self.cap.modify(trans, |x| x + 1)?;
         }
         Ok(v)
     }
 
     /// Remove an element from the queue.
     pub fn pop(&self, trans: &mut Transaction) -> StmResult<T> {
-        self.cap.modify(trans, |x| x+1)?;
+        self.cap.modify(trans, |x| x + 1)?;
         self.queue.pop(trans)
     }
 
@@ -97,7 +97,7 @@ impl<T: Any+Sync+Clone+Send> BoundedQueue<T> {
     /// Check if a queue is full.
     pub fn is_full(&self, trans: &mut Transaction) -> StmResult<bool> {
         let cap = self.cap.read(trans)?;
-        Ok(cap==0)
+        Ok(cap == 0)
     }
 }
 
@@ -127,9 +127,9 @@ mod tests {
             let x1 = queue.pop(trans)?;
             let x2 = queue.pop(trans)?;
             let x3 = queue.pop(trans)?;
-            Ok((x1,x2,x3))
+            Ok((x1, x2, x3))
         });
-        assert_eq!((1,2,3), x);
+        assert_eq!((1, 2, 3), x);
     }
 
     #[test]
@@ -141,17 +141,15 @@ mod tests {
             queue2.push(trans, 1)?;
             queue2.push(trans, 2)
         });
-        atomically(|trans| {
-            queue.push(trans, 3)
-        });
+        atomically(|trans| queue.push(trans, 3));
 
         let x = atomically(|trans| {
             let x1 = queue.pop(trans)?;
             let x2 = queue.pop(trans)?;
             let x3 = queue.pop(trans)?;
-            Ok((x1,x2,x3))
+            Ok((x1, x2, x3))
         });
-        assert_eq!((1,2,3), x);
+        assert_eq!((1, 2, 3), x);
     }
 
     #[test]
@@ -161,11 +159,7 @@ mod tests {
 
         for i in 0..10 {
             let queue2 = queue.clone();
-            thread::spawn(move || {
-                atomically(|trans| 
-                    queue2.push(trans, i)
-                );
-            });
+            thread::spawn(move || { atomically(|trans| queue2.push(trans, i)); });
         }
 
         let mut v = atomically(|trans| {
@@ -178,7 +172,7 @@ mod tests {
 
         v.sort();
         for i in 0..10 {
-            assert_eq!(v[i],i);
+            assert_eq!(v[i], i);
         }
     }
 
@@ -186,7 +180,7 @@ mod tests {
     /// queue is too short to hold all elements simultaneously.
     ///
     /// The threads must push the elments one after another.
-    /// The main thread has to block multiple times while querying 
+    /// The main thread has to block multiple times while querying
     /// all elements.
     #[test]
     fn bqueue_threaded_short_queue() {
@@ -195,11 +189,7 @@ mod tests {
 
         for i in 0..10 {
             let queue2 = queue.clone();
-            thread::spawn(move || {
-                atomically(|trans| 
-                    queue2.push(trans, i)
-                );
-            });
+            thread::spawn(move || { atomically(|trans| queue2.push(trans, i)); });
         }
 
         let mut v = Vec::new();
@@ -209,8 +199,7 @@ mod tests {
 
         v.sort();
         for i in 0..10 {
-            assert_eq!(v[i],i);
+            assert_eq!(v[i], i);
         }
     }
 }
-

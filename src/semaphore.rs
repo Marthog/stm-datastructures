@@ -1,34 +1,32 @@
 use stm::*;
 
-/// `Semaphore` is an implementation of semaphores on top of software txactional 
+/// `Semaphore` is an implementation of semaphores on top of software txactional
 /// memory.
 ///
-/// This is a very simple datastructure and serves as a simple thread 
+/// This is a very simple datastructure and serves as a simple thread
 /// synchronization primitive.
 #[derive(Clone)]
 pub struct Semaphore {
     /// Semaphores are internally just a number.
-    num: TVar<u32>
+    num: TVar<u32>,
 }
 
 impl Semaphore {
     /// Create a new semaphore with `n` initial tokens.
     pub fn new(n: u32) -> Semaphore {
-        Semaphore {
-            num: TVar::new(n)
-        }
+        Semaphore { num: TVar::new(n) }
     }
 
     /// Take a token from the semaphore or retry if none left.
     pub fn wait(&self, tx: &mut Transaction) -> StmResult<()> {
         let n = self.num.read(tx)?;
-        guard(n!=0)?;
-        self.num.write(tx, n-1)
+        guard(n != 0)?;
+        self.num.write(tx, n - 1)
     }
 
     /// Free a token.
     pub fn signal(&self, tx: &mut Transaction) -> StmResult<()> {
-        self.num.modify(tx, |n| n+1)
+        self.num.modify(tx, |n| n + 1)
     }
 }
 
@@ -40,9 +38,7 @@ mod tests {
     #[test]
     fn sem_wait() {
         let sem = Semaphore::new(1);
-        atomically(|tx|
-            sem.wait(tx)
-        );
+        atomically(|tx| sem.wait(tx));
     }
 
     #[test]
@@ -60,19 +56,13 @@ mod tests {
 
         let sem = Semaphore::new(0);
         let sem2 = sem.clone();
-        
-        thread::spawn(move || {
-            for _ in 0..10 {
-                atomically(|tx| 
-                    sem2.signal(tx)
-                );
-            }
+
+        thread::spawn(move || for _ in 0..10 {
+            atomically(|tx| sem2.signal(tx));
         });
 
         for _ in 0..10 {
-            atomically(|tx| {
-                sem.wait(tx)
-            });
+            atomically(|tx| sem.wait(tx));
         }
     }
 
@@ -81,21 +71,14 @@ mod tests {
         use std::thread;
 
         let sem = Semaphore::new(0);
-        
+
         for _ in 0..10 {
             let sem2 = sem.clone();
-            thread::spawn(move || {
-                atomically(|tx| 
-                    sem2.signal(tx)
-                );
-            });
+            thread::spawn(move || { atomically(|tx| sem2.signal(tx)); });
         }
 
         for _ in 0..10 {
-            atomically(|tx| {
-                sem.wait(tx)
-            });
+            atomically(|tx| sem.wait(tx));
         }
     }
 }
-

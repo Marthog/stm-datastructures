@@ -14,11 +14,12 @@ use std::thread;
 /// Run two threads `t1` and `t2`.
 /// Wait for both to finish.
 fn fork<T1, T2>(t1: T1, t2: T2)
-    where T1: FnOnce() -> () + Send + 'static,
-          T2: FnOnce() -> (),
+where
+    T1: FnOnce() -> () + Send + 'static,
+    T2: FnOnce() -> (),
 {
     let (sender, receiver) = channel();
-    thread::spawn(move|| {
+    thread::spawn(move || {
         t1();
         // Signal that t1 is finished.
         sender.send(()).unwrap();
@@ -32,7 +33,7 @@ fn fork<T1, T2>(t1: T1, t2: T2)
 #[bench]
 /// Send a bunch of values across a channel from std.
 fn bench_std_channel(b: &mut Bencher) {
-    
+
     b.iter(|| {
         let (sender, receiver) = channel();
 
@@ -42,7 +43,7 @@ fn bench_std_channel(b: &mut Bencher) {
             },
             || for i in 0..1000 {
                 sender.send(i).unwrap();
-            }
+            },
         );
     });
 }
@@ -57,16 +58,12 @@ fn bench_stm_queue(b: &mut Bencher) {
 
         fork(
             move || for i in 0..1000 {
-                let x = atomically(|tx| {
-                    queue.pop(tx)
-                });
+                let x = atomically(|tx| queue.pop(tx));
                 assert_eq!(x, i);
             },
-            || for i in 0..1000 { 
-                atomically(|tx| 
-                    queue2.push(tx, i)
-                );
-            }
+            || for i in 0..1000 {
+                atomically(|tx| queue2.push(tx, i));
+            },
         );
     });
 }
@@ -77,7 +74,7 @@ fn bench_stm_queue(b: &mut Bencher) {
 ///
 /// The size of 1 forces the channel to hit the upper bound quickly and switch threads.
 fn bench_std_sync_channel_1(b: &mut Bencher) {
-    
+
     b.iter(|| {
         let (sender, receiver) = sync_channel(1);
 
@@ -87,7 +84,7 @@ fn bench_std_sync_channel_1(b: &mut Bencher) {
             },
             || for i in 0..1000 {
                 sender.send(i).unwrap();
-            }
+            },
         );
     });
 }
@@ -103,16 +100,12 @@ fn bench_stm_bqueue_1(b: &mut Bencher) {
 
         fork(
             move || for i in 0..1000 {
-                let x = atomically(|tx| {
-                    queue.pop(tx)
-                });
+                let x = atomically(|tx| queue.pop(tx));
                 assert_eq!(x, i);
             },
-            || for i in 0..1000 { 
-                atomically(|tx| 
-                    queue2.push(tx, i)
-                );
-            }
+            || for i in 0..1000 {
+                atomically(|tx| queue2.push(tx, i));
+            },
         );
     });
 }
@@ -121,10 +114,10 @@ fn bench_stm_bqueue_1(b: &mut Bencher) {
 #[bench]
 /// Send a bunch of values across a sync channel with size 200 from std.
 ///
-/// The size of 200 allows the channel to efficiently store a lot of 
+/// The size of 200 allows the channel to efficiently store a lot of
 /// values in a ringbuffer before switching.
 fn bench_std_sync_channel_200(b: &mut Bencher) {
-    
+
     b.iter(|| {
         let (sender, receiver) = sync_channel(200);
 
@@ -134,7 +127,7 @@ fn bench_std_sync_channel_200(b: &mut Bencher) {
             },
             || for i in 0..1000 {
                 sender.send(i).unwrap();
-            }
+            },
         );
     });
 }
@@ -150,17 +143,12 @@ fn bench_stm_bqueue_200(b: &mut Bencher) {
 
         fork(
             move || for i in 0..1000 {
-                let x = atomically(|tx| {
-                    queue.pop(tx)
-                });
+                let x = atomically(|tx| queue.pop(tx));
                 assert_eq!(x, i);
             },
-            || for i in 0..1000 { 
-                atomically(|tx| 
-                    queue2.push(tx, i)
-                );
-            }
+            || for i in 0..1000 {
+                atomically(|tx| queue2.push(tx, i));
+            },
         );
     });
 }
-
