@@ -1,5 +1,4 @@
 use stm::*;
-use std::sync::Arc;
 use std::any::Any;
 use super::arclist::*;
 
@@ -41,15 +40,15 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
     /// Create a new queue.
     pub fn new() -> Queue<T> {
         Queue {
-            read: TVar::new(End),
-            write: TVar::new(End),
+            read: TVar::new(ArcList::new()),
+            write: TVar::new(ArcList::new()),
         }
     }
 
     /// Add a new element to the queue.
     pub fn push(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
         self.write.modify(trans, |end| 
-            Elem(value, Arc::new(end))
+                          end.prepend(value)
         )
     }
 
@@ -58,7 +57,7 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
     /// `push_front` allows to undo pop-operations and operates the queue in a LIFO way.
     pub fn push_front(&self, trans: &mut Transaction, value: T) -> StmResult<()> {
         self.read.modify(trans, |end| 
-            Elem(value, Arc::new(end))
+                         end.prepend(value)
         )
     }
 
@@ -80,17 +79,17 @@ impl<T: Any+Sync+Clone+Send> Queue<T> {
 
     /// Remove an element from the queue.
     pub fn try_pop(&self, trans: &mut Transaction) -> StmResult<Option<T>> {
-        Ok(match self.read.read(trans)? {
-            Elem(x, xs)     => {
-                self.read.write(trans, (*xs).clone())?;
+        Ok(match self.read.read(trans)?.split() {
+            Some((x, xs))     => {
+                self.read.write(trans, xs)?;
                 Some(x)
             }
-            End             => {
-                let write_list = self.write.replace(trans, End)?;
-                match write_list.reverse() {
-                    End     => None,
-                    Elem(x,xs) => {
-                        self.read.write(trans, (*xs).clone())?;
+            None             => {
+                let write_list = self.write.replace(trans, ArcList::new())?;
+                match write_list.reverse().split() {
+                    None     => None,
+                    Some((x,xs)) => {
+                        self.read.write(trans, xs.clone())?;
                         Some(x)
                     }
                 }
