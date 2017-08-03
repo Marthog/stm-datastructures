@@ -1,6 +1,6 @@
 use stm::*;
 
-/// `Semaphore` is an implementation of semaphores on top of software txactional
+/// `Semaphore` is an implementation of semaphores on top of software transactional
 /// memory.
 ///
 /// This is a very simple datastructure and serves as a simple thread
@@ -34,13 +34,14 @@ impl Semaphore {
 mod tests {
     use super::*;
 
-    // Test if wait with start value of 1 works.
+    /// Test if wait with start value of 1 works.
     #[test]
     fn sem_wait() {
         let sem = Semaphore::new(1);
         atomically(|tx| sem.wait(tx));
     }
 
+    /// Test if signal and wait combo works.
     #[test]
     fn sem_signal_wait() {
         let sem = Semaphore::new(0);
@@ -50,6 +51,7 @@ mod tests {
         });
     }
 
+    /// Test if the semaphore can be used to synchronize two threads.
     #[test]
     fn sem_threaded() {
         use std::thread;
@@ -66,6 +68,7 @@ mod tests {
         }
     }
 
+    /// Test if the semophore works with more than one thread.
     #[test]
     fn sem_threaded2() {
         use std::thread;

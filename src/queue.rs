@@ -7,7 +7,7 @@ use super::arclist::*;
 // beginning of `read`. If `read` is empty, the reversed list `write` is
 // used as a new list. This way all operations are amortized constant time.
 
-/// `Queue` is a threadsafe FIFO queue, that uses software txactional memory.
+/// `Queue` is a threadsafe FIFO queue, that uses software transactional memory.
 ///
 /// It is similar to channels, but undoes operations in case of aborted txactions.
 ///
@@ -112,6 +112,7 @@ mod tests {
     use stm::*;
     use super::*;
 
+    /// Check if push and pop returns the right value.
     #[test]
     fn channel_push_pop() {
         let queue = Queue::new();
@@ -121,6 +122,8 @@ mod tests {
         });
         assert_eq!(42, x);
     }
+
+    /// Check if the queue works as a FIFO within a single transaction.
     #[test]
     fn channel_order() {
         let queue = Queue::new();
@@ -136,17 +139,22 @@ mod tests {
         assert_eq!((1, 2, 3), x);
     }
 
+    /// Check if the queue on multiple consecutive transactions.
+    ///
+    /// Basically this checks if everything is committed correctly.
     #[test]
-    fn channel_multi_txactions() {
+    fn channel_multi_transactions() {
         let queue = Queue::new();
         let queue2 = queue.clone();
 
+        // First push some values.
         atomically(|tx| {
             queue2.push(tx, 1)?;
             queue2.push(tx, 2)
         });
         atomically(|tx| queue.push(tx, 3));
 
+        // Get the values and check for consistency.
         let x = atomically(|tx| {
             let x1 = queue.pop(tx)?;
             let x2 = queue.pop(tx)?;
@@ -156,20 +164,23 @@ mod tests {
         assert_eq!((1, 2, 3), x);
     }
 
+    /// Test if the queue works with multiple concurrent threads.
     #[test]
     fn channel_threaded() {
         use std::thread;
         use std::time::Duration;
         let queue = Queue::new();
 
+        // Spawn 10 threads, that write to the queue.
         for i in 0..10 {
             let queue2 = queue.clone();
             thread::spawn(move || {
-                thread::sleep(Duration::from_millis(20 - i as u64));
+                thread::sleep(Duration::from_millis(20 as u64));
                 atomically(|tx| queue2.push(tx, i));
             });
         }
 
+        // Wait for all the values.
         let mut v = atomically(|tx| {
             let mut v = Vec::new();
             for _ in 0..10 {
@@ -178,6 +189,8 @@ mod tests {
             Ok(v)
         });
 
+        // We don't know the order, but want to check if we received everything
+        // correcty.
         v.sort();
         for i in 0..10 {
             assert_eq!(v[i], i);
